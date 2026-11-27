@@ -1,26 +1,28 @@
 {
   "expo": {
-    "name": "primo-mobile-app",
-    "slug": "primo-mobile-app",
+    "name": "primo",
+    "slug": "primo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "primomobileapp",
+    "scheme": "primo",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/adaptive-icon.png"
+      "icon": "./assets/adaptive-icon.png",
+      "bundleIdentifier": "com.anonymous.primo"
     },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff",
-      "imageWidth": 603
+      "imageWidth": 200
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.anonymous.primo"
     },
     "web": {
       "output": "static",
@@ -31,9 +33,10 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#ffffff",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
         }
       ]
     ],
