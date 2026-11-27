@@ -1,3 +1,4 @@
+import { colors, radius, sizes, text as textStyles } from '@/theme';
 import { type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -9,36 +10,30 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-export const BRAND = '#0076B5';
-
-const VARIANT_COLORS = {
+const VARIANTS = {
   primary: {
-    background: BRAND,
-    backgroundPressed: '#005F91',
-    text: '#FFFFFF',
-    border: 'transparent',
-  },
-  secondary: {
-    background: '#E6F1F8',
-    backgroundPressed: '#D2E6F3',
-    text: BRAND,
+    background: colors.primary,
+    text: colors.surface,
     border: 'transparent',
   },
   outline: {
+    background: colors.surface,
+    text: colors.primary,
+    border: colors.border,
+  },
+  text: {
     background: 'transparent',
-    backgroundPressed: '#E6F1F8',
-    text: BRAND,
-    border: BRAND,
+    text: colors.primary,
+    border: 'transparent',
   },
 } as const;
 
 const SIZES = {
-  sm: { paddingVertical: 10, paddingHorizontal: 16, fontSize: 14, gap: 6 },
-  md: { paddingVertical: 16, paddingHorizontal: 20, fontSize: 16, gap: 8 },
-  lg: { paddingVertical: 18, paddingHorizontal: 24, fontSize: 17, gap: 10 },
+  md: { height: sizes.buttonHeight, radius: radius.button, paddingHorizontal: 20 },
+  sm: { height: 40, radius: radius.input, paddingHorizontal: 14 },
 } as const;
 
-export type ButtonVariant = keyof typeof VARIANT_COLORS;
+export type ButtonVariant = keyof typeof VARIANTS;
 export type ButtonSize = keyof typeof SIZES;
 
 type ButtonProps = {
@@ -70,7 +65,7 @@ export function Button({
   textStyle,
   accessibilityLabel,
 }: ButtonProps) {
-  const colors = VARIANT_COLORS[variant];
+  const palette = VARIANTS[variant];
   const dimensions = SIZES[size];
   const isInteractive = !disabled && !loading;
 
@@ -84,31 +79,26 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         {
-          paddingVertical: dimensions.paddingVertical,
+          height: dimensions.height,
+          borderRadius: dimensions.radius,
           paddingHorizontal: dimensions.paddingHorizontal,
-          gap: dimensions.gap,
-          backgroundColor:
-            pressed && isInteractive
-              ? colors.backgroundPressed
-              : colors.background,
-          borderColor: colors.border,
+          backgroundColor: palette.background,
+          borderColor: palette.border,
         },
         fullWidth && styles.fullWidth,
+        // The spec asks for opacity 0.85 on press rather than a colour shift.
+        pressed && isInteractive && styles.pressed,
         disabled && styles.disabled,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={colors.text} />
+        <ActivityIndicator size="small" color={palette.text} />
       ) : (
         <>
           {leftIcon}
           <Text
-            style={[
-              styles.label,
-              { color: colors.text, fontSize: dimensions.fontSize },
-              textStyle,
-            ]}
+            style={[textStyles.button, { color: palette.text }, textStyle]}
             numberOfLines={1}
           >
             {title}
@@ -125,17 +115,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
+    gap: 8,
     borderWidth: 1,
   },
-  fullWidth: {
-    alignSelf: 'stretch',
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  label: {
-    fontWeight: '700',
-    textAlign: 'center',
-  },
+  fullWidth: { alignSelf: 'stretch' },
+  pressed: { opacity: 0.85 },
+  disabled: { opacity: 0.45 },
 });

@@ -9,6 +9,10 @@ dist/
 web-build/
 expo-env.d.ts
 
+#Docs
+design_handoff_primo_mobile/
+docs/
+
 # Native
 .kotlin/
 *.orig.*
@@ -41,3 +45,6 @@ example
 # generated native folders
 /ios
 /android
+
+# JetBrains IDE
+.idea/

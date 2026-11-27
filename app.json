@@ -38,6 +38,29 @@
           "imageWidth": 200,
           "resizeMode": "contain"
         }
+      ],
+      "expo-video",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Primo to unlock the app with Face ID."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Primo to use your camera to photograph your ID document.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Primo to access your photos so you can attach an ID document.",
+          "cameraPermission": "Allow Primo to use your camera to photograph your ID document.",
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {
