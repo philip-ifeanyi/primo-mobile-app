@@ -35,6 +35,11 @@ const USE_TYPES = ['Private', 'Commercial'] as const;
 export default function Quote() {
   const router = useRouter();
   const quote = useAppState((state) => state.quote);
+  // Shown as the placeholder rather than prefilled: a declaration the
+  // customer did not type is not a declaration.
+  const fullName = useAppState((state) =>
+    `${state.user.firstName} ${state.user.lastName}`.trim()
+  );
   const product = productById(quote.productId);
 
   // Two transient steps in one route: unlike KYC there is nothing to resume,
@@ -72,7 +77,10 @@ export default function Quote() {
         vehicle.registrationNo.trim().length > 0 &&
         vehicle.chassisNo.trim().length > 0 &&
         vehicle.engineNo.trim().length > 0
-      : quote.value !== null && quote.value > 0 && quote.bodyType !== null;
+      : quote.value !== null &&
+        quote.value > 0 &&
+        quote.bodyType !== null &&
+        quote.signature.trim().length > 0;
 
   const back = () => {
     if (step === 2) setStep(1);
@@ -252,6 +260,25 @@ export default function Quote() {
                 />
               </View>
 
+              <View style={styles.signature}>
+                <Input
+                  label="Full name"
+                  value={quote.signature}
+                  onChangeText={(signature) => setQuote({ signature })}
+                  placeholder={fullName || 'Your full name'}
+                  autoCapitalize="words"
+                  autoComplete="name"
+                />
+                <Text
+                  variant="caption"
+                  color="textFaint"
+                  style={styles.helper}
+                >
+                  The name your policy will be issued in. Entering it confirms
+                  the details above are correct.
+                </Text>
+              </View>
+
               <View style={styles.beneficiary}>
                 <Text
                   variant="bodySm"
@@ -325,6 +352,7 @@ export default function Quote() {
 }
 
 const styles = StyleSheet.create({
+  signature: { marginTop: 16 },
   flex: { flex: 1 },
   screen: { flex: 1, backgroundColor: colors.surface },
   body: {

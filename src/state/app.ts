@@ -190,6 +190,15 @@ export type QuoteState = {
   /** Naira, or null while the field is empty. */
   value: number | null;
   bodyType: string | null;
+  /**
+   * The customer's full name, sent as the quote's `signature`.
+   *
+   * Despite the name it is not a cryptographic signature: the portal collects
+   * it as a plain "Full Name" field, first in every one of its sixteen quote
+   * forms, and it stands as the declaration that the details given are true.
+   * It is the name the policy is issued in.
+   */
+  signature: string;
   beneficiary: string | null;
   /** Filled once pricing comes back. */
   result: QuoteResult | null;
@@ -265,6 +274,7 @@ let state: AppState = {
     vehicle: emptyVehicle(),
     value: null,
     bodyType: null,
+    signature: '',
     beneficiary: null,
     result: null,
     frequency: 'monthly',
@@ -379,6 +389,7 @@ export function startQuote(productId: string) {
     vehicle: emptyVehicle(),
     value: null,
     bodyType: null,
+    signature: '',
     beneficiary: null,
     result: null,
     frequency: 'monthly',
@@ -398,6 +409,7 @@ export function clearQuote() {
     vehicle: emptyVehicle(),
     value: null,
     bodyType: null,
+    signature: '',
     beneficiary: null,
     result: null,
     frequency: 'monthly',

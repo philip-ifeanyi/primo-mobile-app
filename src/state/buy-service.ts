@@ -270,9 +270,7 @@ let categoryIds: Record<string, number> | null = null;
 /** GET Product/GetAll?CategoryId= — falls back to the fixtures. */
 export async function loadProducts(categoryId: string): Promise<void> {
   if (!IS_API_CONFIGURED) {
-    catalogue.products[categoryId] = PRODUCTS.filter(
-      (product) => product.categoryId === categoryId
-    );
+    catalogue.products[categoryId] = fixtureProductsFor(categoryId);
     emitCatalogue();
     return;
   }
@@ -286,9 +284,7 @@ export async function loadProducts(categoryId: string): Promise<void> {
   } catch {
     // A catalogue that will not load should not be an empty shop; the
     // fixtures at least let the flow be walked and inspected.
-    catalogue.products[categoryId] = PRODUCTS.filter(
-      (product) => product.categoryId === categoryId
-    );
+    catalogue.products[categoryId] = fixtureProductsFor(categoryId);
   }
   emitCatalogue();
 }
@@ -338,11 +334,27 @@ export async function loadVehicleModels(makeId: string): Promise<void> {
   emitCatalogue();
 }
 
-export function productsFor(categoryId: string): Product[] {
-  return (
-    catalogue.products[categoryId] ??
-    PRODUCTS.filter((product) => product.categoryId === categoryId)
+/**
+ * Stable empty arrays and memoised fixture slices.
+ *
+ * These feed useSyncExternalStore's getSnapshot, which must return the same
+ * reference when nothing has changed — a fresh `[]` or `.filter()` result on
+ * every call makes React believe the store changed on every render, which it
+ * reports as "The result of getSnapshot should be cached to avoid an infinite
+ * loop" and which can genuinely loop.
+ */
+const EMPTY_MODELS: ModelOption[] = [];
+const fixtureProducts: Record<string, Product[]> = {};
+
+function fixtureProductsFor(categoryId: string): Product[] {
+  fixtureProducts[categoryId] ??= PRODUCTS.filter(
+    (product) => product.categoryId === categoryId
   );
+  return fixtureProducts[categoryId];
+}
+
+export function productsFor(categoryId: string): Product[] {
+  return catalogue.products[categoryId] ?? fixtureProductsFor(categoryId);
 }
 
 export function productById(id: string | null): Product | null {
@@ -359,8 +371,8 @@ export function vehicleMakes(): MakeOption[] {
 }
 
 export function modelsFor(makeId: string | null): ModelOption[] {
-  if (!makeId) return [];
-  return catalogue.models[makeId] ?? [];
+  if (!makeId) return EMPTY_MODELS;
+  return catalogue.models[makeId] ?? EMPTY_MODELS;
 }
 
 export const BODY_TYPES = ['Saloon', 'SUV', 'Bus', 'Pick-up'] as const;
@@ -380,9 +392,9 @@ function reference() {
  * POST Insurance/VehicleQuote. The endpoint takes an array of vehicles even
  * though the flow quotes one at a time, and it wants the insurer's own make
  * and model ids rather than the names the UI shows — hence makeId/modelId on
- * the vehicle. `signature` is required by the DTO; it is the customer's
- * declaration, and until the flow captures one the registration number
- * stands in so the field is at least traceable to the vehicle.
+ * the vehicle. `signature` is the customer's full name, typed on the quote
+ * step — not a cryptographic signature. The portal collects it the same way,
+ * as the first field of all sixteen of its quote forms.
  *
  * The response carries `totalPremium` for the term, not a monthly figure, so
  * the monthly number shown in the UI is derived rather than quoted.
@@ -414,7 +426,7 @@ export async function priceQuote(): Promise<QuoteResult | null> {
   const quoted = await requestVehicleQuote({
     productId: product.apiId,
     userId: peekUserId() ?? 0,
-    signature: vehicle.registrationNo,
+    signature: quote.signature.trim(),
     vehicle: {
       registrationNo: vehicle.registrationNo,
       makeId: vehicle.makeId,
