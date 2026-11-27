@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/adaptive-icon.png",
-      "bundleIdentifier": "com.anonymous.primo"
+      "bundleIdentifier": "com.anonymous.primo",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "splash": {
       "image": "./assets/splash.png",
@@ -61,7 +66,8 @@
           "cameraPermission": "Allow Primo to use your camera to photograph your ID document.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

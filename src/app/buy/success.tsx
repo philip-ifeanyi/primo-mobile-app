@@ -1,12 +1,12 @@
 import { Button } from '@/components/ui/Button';
 import { SuccessTile } from '@/components/ui/SuccessTile';
 import { Text } from '@/components/ui/Text';
-import { clearQuote } from '@/state/app';
+import { clearQuote, useAppState } from '@/state/app';
 import { colors, fonts, radius, sizes } from '@/theme';
 import Feather from '@expo/vector-icons/Feather';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Success() {
@@ -15,6 +15,14 @@ export default function Success() {
     policyNumber: string;
     nextDebit?: string;
   }>();
+
+  // The certificate lives on the issued policy, not in the route params, so
+  // that a deep link to this screen cannot fabricate one.
+  const documentUrl = useAppState(
+    (state) =>
+      state.policies.find((policy) => policy.policyNumber === policyNumber)
+        ?.documentUrl ?? null
+  );
 
   // The policy is issued and in state; the quote that produced it is spent.
   // Clearing it also disarms the Pay button behind this screen.
@@ -69,12 +77,20 @@ export default function Success() {
           <Pressable
             hitSlop={12}
             accessibilityRole="button"
-            // TODO: share the real certificate once documents are served.
+            disabled={!documentUrl}
+            onPress={() => {
+              if (!documentUrl) return;
+              // Share the URL rather than the file: the certificate is served
+              // by the backend and has not been downloaded to the device.
+              void Share.share({ url: documentUrl, message: documentUrl }).catch(
+                () => Alert.alert('Could not share', 'Please try again.')
+              );
+            }}
             style={({ pressed }) => [pressed && styles.pressed]}
           >
             <Text
               variant="label"
-              color="primary"
+              color={documentUrl ? 'primary' : 'textFaint'}
             >
               Share
             </Text>

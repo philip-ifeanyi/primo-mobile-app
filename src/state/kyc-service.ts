@@ -1,3 +1,12 @@
+import { File } from 'expo-file-system';
+import { messageFor } from '@/api/errors';
+import {
+  resolveAccount,
+  saveDocument,
+  saveEmployer,
+  saveMedicals,
+  verifyBvnNumber,
+} from '@/api/kyc';
 import {
   readKyc,
   setKyc,
@@ -9,26 +18,30 @@ import {
 } from './app';
 
 /**
- * Every call the KYC wizard makes to the outside world lives here, stubbed.
+ * Orchestration for the KYC steps: which status each screen shows while a
+ * call is in flight, and what it shows when the call comes back.
  *
- * None of these touch the network yet — the backend contract has not landed.
- * Each one simulates the latency and the state transitions the screens need so
- * the wizard behaves correctly, and each carries the endpoint it is standing in
- * for. Wiring the real API should be a change to this file only; no screen
- * knows how the work gets done.
+ * The calls themselves live in src/api/kyc.ts, which decides between the real
+ * endpoint and a stub. Nothing here knows which it got, so the wizard behaves
+ * the same either way — including on failure.
  */
 
-const RESOLVE_DELAY_MS = 1400;
-const VERIFY_DELAY_MS = 2200;
 /** The design's upload: 8% a tick, 110ms apart, so ~1.4s end to end. */
 const UPLOAD_TICK_MS = 110;
 const UPLOAD_TICK_PERCENT = 8;
 
+/**
+ * Base64 inflates bytes by about a third, and this whole string has to fit in
+ * one JSON body. 8M characters is roughly a 6MB file — generous for an ID
+ * photo, and small enough that the request will not be rejected or time out.
+ */
+const MAX_DOCUMENT_BASE64_CHARS = 8_000_000;
+
 export type Bank = { code: string; name: string };
 
 /**
- * TODO: replace with GET /banks. NIBSS codes, so the list is stable enough to
- * hardcode in the meantime; the real list is longer and changes.
+ * Fallback list for `fetchBanks`. NIBSS codes, so it is stable enough to
+ * hardcode; the real list is longer and changes.
  */
 export const BANKS: Bank[] = [
   { code: '044', name: 'Access Bank' },
@@ -63,54 +76,56 @@ export function shortBankName(name: string | null) {
   return name.replace(/ (Nigeria|of Nigeria|Microfinance Bank|Bank)$/, '');
 }
 
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-/**
- * Asks the bank for the name on an account.
- *
- * TODO: replace with POST /kyc/bank/resolve { bankCode, nuban }. Reads the
- * profile name back so the "Name matches your profile" result row is honest;
- * the real endpoint returns whatever the bank holds, which may well differ, and
- * a mismatch needs its own error state.
- */
+/** Asks the bank for the name on an account. */
 export async function resolveAccountName() {
   const { bank, details } = readKyc();
   if (bank.nuban.length !== 10 || !bank.bankCode) return;
 
   setKycBank({ status: 'pending', accountName: null, error: null });
-  await wait(RESOLVE_DELAY_MS);
 
-  // The user may have edited the number while the request was in flight.
-  const current = readKyc().bank;
-  if (current.nuban !== bank.nuban || current.status !== 'pending') return;
+  try {
+    const { accountName } = await resolveAccount(
+      { bankCode: bank.bankCode, nuban: bank.nuban },
+      `${details.firstName} C. ${details.surname}`.toUpperCase()
+    );
 
-  const resolved = `${details.firstName} C. ${details.surname}`.toUpperCase();
-  setKycBank({ status: 'done', accountName: resolved, error: null });
+    // The user may have edited the number while the request was in flight,
+    // in which case this answer is about a different account.
+    const current = readKyc().bank;
+    if (current.nuban !== bank.nuban || current.status !== 'pending') return;
+
+    setKycBank({ status: 'done', accountName, error: null });
+  } catch (cause) {
+    const current = readKyc().bank;
+    if (current.nuban !== bank.nuban || current.status !== 'pending') return;
+
+    setKycBank({ status: 'error', accountName: null, error: messageFor(cause) });
+  }
 }
 
-/**
- * Verifies a BVN against NIBSS.
- *
- * TODO: replace with POST /kyc/bvn/verify { bvn }.
- */
+/** Verifies a BVN against NIBSS. */
 export async function verifyBvn() {
   const { bvn, details } = readKyc();
   if (bvn.number.length !== 11) return;
 
   setKycBvn({ status: 'pending', matchedName: null, error: null });
-  await wait(VERIFY_DELAY_MS);
 
-  const current = readKyc().bvn;
-  if (current.number !== bvn.number || current.status !== 'pending') return;
+  try {
+    const { matchedName } = await verifyBvnNumber(
+      bvn.number,
+      `${details.firstName} C. ${details.surname}`
+    );
 
-  setKycBvn({
-    status: 'done',
-    matchedName: `${details.firstName} C. ${details.surname}`,
-    error: null,
-  });
+    const current = readKyc().bvn;
+    if (current.number !== bvn.number || current.status !== 'pending') return;
+
+    setKycBvn({ status: 'done', matchedName, error: null });
+  } catch (cause) {
+    const current = readKyc().bvn;
+    if (current.number !== bvn.number || current.status !== 'pending') return;
+
+    setKycBvn({ status: 'error', matchedName: null, error: messageFor(cause) });
+  }
 }
 
 let uploadTimer: ReturnType<typeof setInterval> | null = null;
@@ -158,11 +173,58 @@ export function cancelDocumentUpload() {
 /**
  * Hands the completed application over for review.
  *
- * TODO: replace with POST /kyc/submit. The real response decides whether the
- * user lands on "under review" or comes straight back with field errors.
+ * Returns whether it was accepted, so step 6 only advances on success rather
+ * than showing "under review" for an application the server never received.
  */
-export async function submitKycForReview() {
-  setKyc({ status: 'in_review', currentStep: REVIEW_KYC_STEP });
+export async function submitKycForReview(): Promise<
+  { ok: true } | { ok: false; message: string }
+> {
+  const { employer, medical, document } = readKyc();
+
+  try {
+    // The backend has no single "submit" endpoint — each section saves
+    // itself. The wizard collects everything first and then writes the
+    // sections that the earlier steps did not, in the order the portal does.
+    await saveEmployer({
+      name: employer.name,
+      phone: employer.phone,
+      tin: employer.tin,
+      address: employer.address,
+    });
+
+    await saveMedicals(
+      medical.map((answer) => ({
+        question: answer.condition,
+        selected: answer.hasCondition === true,
+      }))
+    );
+
+    if (document.uri && document.issuedOn && document.expiresOn) {
+      // The API has no upload endpoint; the bytes go inline as base64 and the
+      // server stores them. See saveDocument for why.
+      const base64 = await new File(document.uri).base64();
+
+      if (base64.length > MAX_DOCUMENT_BASE64_CHARS) {
+        return {
+          ok: false,
+          message:
+            'That photo is too large to upload. Please retake it at a lower resolution.',
+        };
+      }
+
+      await saveDocument({
+        base64,
+        issueDate: document.issuedOn,
+        expiryDate: document.expiresOn,
+        type: document.docType,
+      });
+    }
+
+    setKyc({ status: 'in_review', currentStep: REVIEW_KYC_STEP });
+    return { ok: true };
+  } catch (cause) {
+    return { ok: false, message: messageFor(cause) };
+  }
 }
 
 /**

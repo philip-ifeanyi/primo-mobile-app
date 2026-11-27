@@ -1,9 +1,13 @@
+import { sendOtp, verifyOtp } from '@/api/auth';
+import { messageFor } from '@/api/errors';
 import { BackButton } from '@/components/ui/BackButton';
-import { CodeInput } from '@/components/ui/CodeInput';
 import { Button } from '@/components/ui/Button';
+import { CodeInput } from '@/components/ui/CodeInput';
+import { StatusRow } from '@/components/ui/StatusRow';
 import { Text } from '@/components/ui/Text';
+import { signIn, useSession } from '@/state/session';
 import { colors, fonts, sizes } from '@/theme';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,13 +15,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const CODE_LENGTH = 6;
 const RESEND_SECONDS = 24;
 
-// Placeholder until the signup form feeds the real number through app state.
-const PHONE = '+234 803 412 9087';
+/** "8034129087" -> "+234 803 412 9087". */
+function formatPhone(digits: string) {
+  const parts = digits.match(/^(\d{3})(\d{3})(\d{4})$/);
+  return parts ? `+234 ${parts[1]} ${parts[2]} ${parts[3]}` : `+234 ${digits}`;
+}
 
 export default function Otp() {
   const router = useRouter();
+  const pending = useSession((state) => state.pending);
+
   const [code, setCode] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -25,7 +36,37 @@ export default function Otp() {
     return () => clearInterval(timer);
   }, [secondsLeft]);
 
-  const isComplete = code.length === CODE_LENGTH;
+  // Reached without signing up — there is no number to verify against.
+  if (!pending) return <Redirect href="/auth/signup" />;
+
+  const isComplete = code.length === CODE_LENGTH && !isSubmitting;
+
+  const submit = async () => {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await verifyOtp(pending.phone, code);
+      // Only now does the account become a session.
+      await signIn(pending.tokens);
+      router.replace('/auth/biometric');
+    } catch (cause) {
+      setError(messageFor(cause));
+      setCode('');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resend = async () => {
+    setSecondsLeft(RESEND_SECONDS);
+    setError(null);
+    try {
+      await sendOtp(pending.phone);
+    } catch (cause) {
+      setError(messageFor(cause));
+    }
+  };
 
   return (
     <SafeAreaView
@@ -47,7 +88,7 @@ export default function Otp() {
               color="ink"
               style={styles.phone}
             >
-              {PHONE}
+              {formatPhone(pending.phone)}
             </Text>
             .
           </Text>
@@ -71,8 +112,9 @@ export default function Otp() {
             </Text>
           ) : (
             <Pressable
-              onPress={() => setSecondsLeft(RESEND_SECONDS)}
+              onPress={() => void resend()}
               hitSlop={10}
+              accessibilityRole="button"
             >
               <Text
                 variant="bodySm"
@@ -86,10 +128,17 @@ export default function Otp() {
       </View>
 
       <View style={styles.footer}>
+        {error ? (
+          <StatusRow
+            tone="error"
+            title={error}
+          />
+        ) : null}
         <Button
           title="Verify"
           disabled={!isComplete}
-          onPress={() => router.push('/auth/biometric')}
+          loading={isSubmitting}
+          onPress={() => void submit()}
         />
       </View>
     </SafeAreaView>

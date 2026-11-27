@@ -1,6 +1,11 @@
+import { logIn } from '@/api/auth';
+import { messageFor } from '@/api/errors';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { StatusRow } from '@/components/ui/StatusRow';
 import { Text } from '@/components/ui/Text';
+import { Wordmark } from '@/components/ui/Wordmark';
+import { signIn } from '@/state/session';
 import { colors, sizes } from '@/theme';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -21,8 +26,27 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = EMAIL_PATTERN.test(email) && password.length > 0;
+  const canSubmit =
+    EMAIL_PATTERN.test(email) && password.length > 0 && !isSubmitting;
+
+  const submit = async () => {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const result = await logIn({ email: email.trim(), password });
+      // Applies the tokens, which flips the gate to signed in.
+      await signIn(result);
+      router.replace('/auth/biometric');
+    } catch (cause) {
+      setError(messageFor(cause));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView
@@ -36,13 +60,10 @@ export default function Login() {
         // the keyboard, so the app has to consume the IME inset itself.
         behavior="padding"
       >
-        <Text
-          variant="wordmark"
-          color="primary"
+        <Wordmark
+          fontSize={22}
           style={styles.wordmark}
-        >
-          primo
-        </Text>
+        />
 
         <ScrollView
           style={styles.flex}
@@ -111,11 +132,19 @@ export default function Login() {
             </Text>
           </Pressable>
 
+          {error ? (
+            <StatusRow
+              tone="error"
+              title={error}
+            />
+          ) : null}
+
           <View style={styles.actions}>
             <Button
               title="Log in"
               disabled={!canSubmit}
-              onPress={() => router.push('/auth/biometric')}
+              loading={isSubmitting}
+              onPress={() => void submit()}
             />
             <Button
               title="Create an account"
@@ -133,9 +162,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
   flex: { flex: 1 },
   wordmark: {
-    fontSize: 22,
-    lineHeight: 27,
-    letterSpacing: -0.66,
     paddingHorizontal: sizes.screenPaddingAuth,
     paddingVertical: 12,
   },

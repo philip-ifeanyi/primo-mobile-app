@@ -10,13 +10,15 @@ import { Text } from '@/components/ui/Text';
 import { setQuote, setQuoteVehicle, useAppState } from '@/state/app';
 import {
   BODY_TYPES,
+  loadVehicleMakes,
+  loadVehicleModels,
   modelsFor,
   productById,
-  VEHICLE_MAKES,
+  useCatalogue,
 } from '@/state/buy-service';
 import { colors, radius, sizes } from '@/theme';
 import { Redirect, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Pressable,
@@ -27,8 +29,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TOTAL_STEPS = 2;
-const toOptions = (values: readonly string[]) =>
-  values.map((value) => ({ key: value, label: value }));
+/** Maps onto VehicleQuote's `isCommercial` boolean. */
+const USE_TYPES = ['Private', 'Commercial'] as const;
 
 export default function Quote() {
   const router = useRouter();
@@ -40,18 +42,36 @@ export default function Quote() {
   const [step, setStep] = useState(1);
   const [picking, setPicking] = useState<'make' | 'model' | null>(null);
 
+  // Subscribing rather than reading once: the makes arrive from the network,
+  // and the models arrive a second request later.
+  const makes = useCatalogue((c) => c.makes);
+  const makeId = useAppState((state) => state.quote.vehicle.makeId);
+  const models = useCatalogue(() => modelsFor(makeId));
+
+  useEffect(() => {
+    void loadVehicleMakes();
+  }, []);
+
+  useEffect(() => {
+    if (makeId) void loadVehicleModels(makeId);
+  }, [makeId]);
+
   // Reached without choosing a product — send the user back to the catalogue.
   if (!product) return <Redirect href="/buy/motor" />;
 
   const { vehicle } = quote;
-  const models = modelsFor(vehicle.make);
 
+  // Registration, chassis and engine numbers are all required by
+  // Insurance/VehicleQuote, so the step cannot be completed without them.
   const canContinue =
     step === 1
-      ? vehicle.make !== null &&
-        vehicle.model !== null &&
+      ? vehicle.makeId !== null &&
+        vehicle.modelId !== null &&
         vehicle.year.length === 4 &&
-        vehicle.colour.trim().length > 0
+        vehicle.colour.trim().length > 0 &&
+        vehicle.registrationNo.trim().length > 0 &&
+        vehicle.chassisNo.trim().length > 0 &&
+        vehicle.engineNo.trim().length > 0
       : quote.value !== null && quote.value > 0 && quote.bodyType !== null;
 
   const back = () => {
@@ -120,10 +140,10 @@ export default function Quote() {
                     label="Model"
                     value={vehicle.model}
                     placeholder={
-                      vehicle.make ? 'Choose a model' : 'Pick a make first'
+                      vehicle.makeId ? 'Choose a model' : 'Pick a make first'
                     }
                     onPress={() => {
-                      if (vehicle.make) setPicking('model');
+                      if (vehicle.makeId) setPicking('model');
                     }}
                   />
                   <Text
@@ -155,6 +175,38 @@ export default function Quote() {
                     placeholder="Silver"
                   />
                 </View>
+
+                <Input
+                  label="Plate number"
+                  value={vehicle.registrationNo}
+                  onChangeText={(registrationNo) =>
+                    setQuoteVehicle({
+                      registrationNo: registrationNo.toUpperCase(),
+                    })
+                  }
+                  placeholder="ABC-123-XY"
+                  autoCapitalize="characters"
+                />
+
+                <Input
+                  label="Chassis number"
+                  value={vehicle.chassisNo}
+                  onChangeText={(chassisNo) =>
+                    setQuoteVehicle({ chassisNo: chassisNo.toUpperCase() })
+                  }
+                  placeholder="On your vehicle licence"
+                  autoCapitalize="characters"
+                />
+
+                <Input
+                  label="Engine number"
+                  value={vehicle.engineNo}
+                  onChangeText={(engineNo) =>
+                    setQuoteVehicle({ engineNo: engineNo.toUpperCase() })
+                  }
+                  placeholder="On your vehicle licence"
+                  autoCapitalize="characters"
+                />
               </View>
             </View>
           ) : (
@@ -186,6 +238,17 @@ export default function Quote() {
                   options={BODY_TYPES}
                   value={quote.bodyType}
                   onChange={(bodyType) => setQuote({ bodyType })}
+                />
+              </View>
+
+              <View style={styles.bodyTypes}>
+                <ChipGroup
+                  label="How is it used?"
+                  options={USE_TYPES}
+                  value={vehicle.isCommercial ? 'Commercial' : 'Private'}
+                  onChange={(use) =>
+                    setQuoteVehicle({ isCommercial: use === 'Commercial' })
+                  }
                 />
               </View>
 
@@ -227,11 +290,17 @@ export default function Quote() {
       {picking === 'make' ? (
         <OptionSheet
           title="Vehicle make"
-          options={toOptions(VEHICLE_MAKES)}
-          selectedKey={vehicle.make}
+          options={makes.map((make) => ({ key: make.id, label: make.name }))}
+          selectedKey={vehicle.makeId}
           onSelect={(option) =>
-            // A new make invalidates the model chosen under the old one.
-            setQuoteVehicle({ make: option.key, model: null })
+            // A new make invalidates the model chosen under the old one. Both
+            // the id (for the API) and the label (for the UI) are stored.
+            setQuoteVehicle({
+              makeId: option.key,
+              make: option.label,
+              modelId: null,
+              model: null,
+            })
           }
           onDismiss={() => setPicking(null)}
         />
@@ -240,9 +309,14 @@ export default function Quote() {
       {picking === 'model' ? (
         <OptionSheet
           title="Vehicle model"
-          options={toOptions(models)}
-          selectedKey={vehicle.model}
-          onSelect={(option) => setQuoteVehicle({ model: option.key })}
+          options={models.map((model) => ({
+            key: model.id,
+            label: model.name,
+          }))}
+          selectedKey={vehicle.modelId}
+          onSelect={(option) =>
+            setQuoteVehicle({ modelId: option.key, model: option.label })
+          }
           onDismiss={() => setPicking(null)}
         />
       ) : null}

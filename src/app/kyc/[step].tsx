@@ -9,6 +9,7 @@ import { Step8Approved } from '@/components/kyc/Step8Approved';
 import { StepChrome } from '@/components/kyc/StepChrome';
 import { kycHref } from '@/components/kyc/navigation';
 import { canContinue } from '@/components/kyc/validation';
+import { StatusRow } from '@/components/ui/StatusRow';
 import { Text } from '@/components/ui/Text';
 import {
   APPROVED_KYC_STEP,
@@ -21,6 +22,7 @@ import {
 import { simulateApproval, submitKycForReview } from '@/state/kyc-service';
 import { colors, fonts } from '@/theme';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 /** Steps 1-5 continue, 6 submits, and the last two leave the wizard. */
@@ -50,6 +52,8 @@ export default function KycStep() {
   const router = useRouter();
   const { step: stepParam } = useLocalSearchParams<{ step: string }>();
   const kyc = useAppState((state) => state.kyc);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const step = Number(stepParam);
   const isValidStep =
@@ -74,8 +78,16 @@ export default function KycStep() {
   };
 
   const submit = async () => {
-    await submitKycForReview();
-    goToStep(REVIEW_KYC_STEP);
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    const result = await submitKycForReview();
+    setIsSubmitting(false);
+
+    // Staying put on failure: "We're reviewing your details" would be a lie
+    // about an application the server never accepted.
+    if (result.ok) goToStep(REVIEW_KYC_STEP);
+    else setSubmitError(result.message);
   };
 
   const next = () => {
@@ -104,10 +116,15 @@ export default function KycStep() {
       // reports on its status, not forms.
       onSave={step < REVIEW_KYC_STEP ? exit : undefined}
       ctaLabel={CTA_LABELS[step]}
-      ctaDisabled={!canContinue(step, kyc)}
+      ctaDisabled={!canContinue(step, kyc) || isSubmitting}
       onCta={next}
       footerExtra={
-        __DEV__ && step === REVIEW_KYC_STEP ? (
+        submitError ? (
+          <StatusRow
+            tone="error"
+            title={submitError}
+          />
+        ) : __DEV__ && step === REVIEW_KYC_STEP ? (
           <Pressable
             onPress={() => {
               simulateApproval();

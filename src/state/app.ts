@@ -1,3 +1,5 @@
+import type { DocumentTypeName } from '../api/kyc';
+
 import { useSyncExternalStore } from 'react';
 
 /** Titles for the 8 KYC steps, in order. Index 0 is step 1. */
@@ -26,6 +28,12 @@ export type Policy = {
   premiumMonthly: number;
   nextDebit: string;
   expires: string;
+  /**
+   * The certificate PDF, as returned by Insurance/GeneratePolicyDocument.
+   * Null for a policy issued offline against the fixtures, so anything that
+   * offers to open or share it must handle its absence.
+   */
+  documentUrl: string | null;
 };
 
 export type Referral = {
@@ -89,6 +97,12 @@ export type KycDocument = {
   status: 'none' | 'uploading' | 'uploaded' | 'error';
   issuedOn: string | null;
   expiresOn: string | null;
+  /**
+   * Which kind of ID this is. The backend requires it (DocumentTypes, 0-5)
+   * and step 6 has no picker for it yet, so this default is a placeholder,
+   * not a decision — the screen needs a selector before KYC is truthful.
+   */
+  docType: DocumentTypeName;
 };
 
 export type KycState = {
@@ -105,17 +119,61 @@ export type KycState = {
 };
 
 export type Vehicle = {
+  /** Display name, for the UI. */
   make: string | null;
   model: string | null;
+  /**
+   * The insurer's own identifiers, which is what VehicleQuote actually takes.
+   * Both are strings in the API — GetVehicleMakes returns `id` as a string —
+   * so they must not be parsed to numbers or leading zeroes would be lost.
+   */
+  makeId: string | null;
+  modelId: string | null;
   year: string;
   colour: string;
+  /** Plate number. Required by VehicleQuote. */
+  registrationNo: string;
+  /** Required by VehicleQuote; found on the vehicle's licence. */
+  chassisNo: string;
+  engineNo: string;
+  /** Ride-hailing and other commercial use rates differently. */
+  isCommercial: boolean;
 };
+
+/**
+ * A blank vehicle. Three places need one — the initial state and both quote
+ * resets — and they had drifted apart before; a factory means a new field is
+ * added once.
+ */
+export function emptyVehicle(): Vehicle {
+  return {
+    make: null,
+    model: null,
+    makeId: null,
+    modelId: null,
+    year: '',
+    colour: '',
+    registrationNo: '',
+    chassisNo: '',
+    engineNo: '',
+    isCommercial: false,
+  };
+}
 
 /** One row of the "What's covered" list on the quote result. */
 export type CoverLine = { label: string; value: string };
 
 export type QuoteResult = {
+  /**
+   * The insurer's quote reference, shown to the user (`quoteNo`).
+   */
   quoteId: string;
+  /**
+   * The backend's numeric id for the quote. GeneratePolicyDocument takes this
+   * as `quoteId`, and the payment SDK takes it too — so it is not the same
+   * value as the reference above, despite the shared name upstream.
+   */
+  id: number;
   premiumYearly: number;
   premiumMonthly: number;
   /** ISO yyyy-mm-dd. */
@@ -198,12 +256,13 @@ let state: AppState = {
       status: 'none',
       issuedOn: null,
       expiresOn: null,
+      docType: 'NationalId',
     },
     notificationsOptIn: true,
   },
   quote: {
     productId: null,
-    vehicle: { make: null, model: null, year: '', colour: '' },
+    vehicle: emptyVehicle(),
     value: null,
     bodyType: null,
     beneficiary: null,
@@ -317,7 +376,7 @@ export function setQuoteVehicle(patch: Partial<Vehicle>) {
 export function startQuote(productId: string) {
   setQuote({
     productId,
-    vehicle: { make: null, model: null, year: '', colour: '' },
+    vehicle: emptyVehicle(),
     value: null,
     bodyType: null,
     beneficiary: null,
@@ -336,7 +395,7 @@ export function startQuote(productId: string) {
 export function clearQuote() {
   setQuote({
     productId: null,
-    vehicle: { make: null, model: null, year: '', colour: '' },
+    vehicle: emptyVehicle(),
     value: null,
     bodyType: null,
     beneficiary: null,

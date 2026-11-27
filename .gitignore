@@ -35,6 +35,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
@@ -48,3 +49,6 @@ example
 
 # JetBrains IDE
 .idea/
+
+# API probe output (scripts/probe-api.sh) — may contain real account data
+api-probe/

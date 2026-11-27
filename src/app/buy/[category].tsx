@@ -4,9 +4,10 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Pill } from '@/components/ui/Pill';
 import { Text } from '@/components/ui/Text';
 import { formatNaira, KYC_STEPS, startQuote, useAppState } from '@/state/app';
-import { productsFor } from '@/state/buy-service';
+import { loadProducts, productsFor, useCatalogue } from '@/state/buy-service';
 import { colors, fonts, radius, sizes } from '@/theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -27,7 +28,14 @@ export default function ProductList() {
   const kyc = useAppState((state) => state.kyc);
 
   const title = CATEGORY_NAMES[category] ?? 'Insurance';
-  const products = productsFor(category);
+
+  // Subscribed, because the catalogue is fetched: the first render shows the
+  // fixtures and the real products replace them when they arrive.
+  const products = useCatalogue(() => productsFor(category));
+
+  useEffect(() => {
+    void loadProducts(category);
+  }, [category]);
   // The insurance tiles check this too, but a deep link reaches this route
   // without passing them, and the rule is that no purchase may start before
   // KYC is approved. Blocking in place rather than redirecting: bouncing to

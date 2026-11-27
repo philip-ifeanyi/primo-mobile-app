@@ -1,3 +1,5 @@
+import { signUp } from '@/api/auth';
+import { messageFor } from '@/api/errors';
 import { BackButton } from '@/components/ui/BackButton';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -6,7 +8,9 @@ import {
   PasswordStrength,
   scorePassword,
 } from '@/components/ui/PasswordStrength';
+import { StatusRow } from '@/components/ui/StatusRow';
 import { Text } from '@/components/ui/Text';
+import { setPending } from '@/state/session';
 import { colors, fonts, sizes } from '@/theme';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -30,13 +34,38 @@ export default function SignUp() {
   const [referral, setReferral] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const strength = scorePassword(password);
+  const digits = phone.replace(/\D/g, '');
   const canSubmit =
     EMAIL_PATTERN.test(email) &&
-    phone.replace(/\D/g, '').length === 10 &&
+    digits.length === 10 &&
     strength >= 2 &&
-    agreed;
+    agreed &&
+    !isSubmitting;
+
+  const submit = async () => {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const result = await signUp({
+        email: email.trim(),
+        password,
+        phone: digits,
+        referralCode: referral.trim() || undefined,
+      });
+      // Held, not applied: the account is not verified until the OTP is in.
+      setPending({ tokens: result, phone: digits });
+      router.push('/auth/otp');
+    } catch (cause) {
+      setError(messageFor(cause));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView
@@ -166,10 +195,17 @@ export default function SignUp() {
         </ScrollView>
 
         <View style={styles.footer}>
+          {error ? (
+            <StatusRow
+              tone="error"
+              title={error}
+            />
+          ) : null}
           <Button
             title="Create account"
             disabled={!canSubmit}
-            onPress={() => router.push('/auth/otp')}
+            loading={isSubmitting}
+            onPress={() => void submit()}
           />
         </View>
       </KeyboardAvoidingView>

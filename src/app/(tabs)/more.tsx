@@ -1,8 +1,10 @@
+import { logOut } from '@/api/auth';
 import { kycHref } from '@/components/kyc/navigation';
 import { Pill } from '@/components/ui/Pill';
 import { TabScreen } from '@/components/ui/TabScreen';
 import { Text } from '@/components/ui/Text';
 import { initialsOf, KYC_STEPS, useAppState } from '@/state/app';
+import { signOut } from '@/state/session';
 import { colors, fonts, radius } from '@/theme';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
@@ -29,8 +31,12 @@ export default function More() {
     {
       label: 'Log out',
       danger: true,
-      // TODO: clear the session in app state once auth is real.
-      onPress: () => router.replace('/auth/login'),
+      // Revoke server-side first, then drop the local tokens. The auth gate
+      // sees the session end and sends the user to login, so there is no
+      // navigation here to get out of step with the session.
+      onPress: () => {
+        void logOut().finally(() => void signOut());
+      },
     },
   ];
 

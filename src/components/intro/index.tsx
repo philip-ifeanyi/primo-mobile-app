@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/Button';
 import { PageIndicator } from '@/components/ui/PageIndicator';
 import { Text } from '@/components/ui/Text';
+import { Wordmark } from '@/components/ui/Wordmark';
 import { colors, radius, sizes } from '@/theme';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -25,12 +26,7 @@ const IntroHeader = () => {
 
   return (
     <View style={styles.header}>
-      <Text
-        variant="wordmark"
-        color="primary"
-      >
-        primo
-      </Text>
+      <Wordmark />
       <Pressable
         hitSlop={16}
         onPress={() => router.push('/auth/signup')}
