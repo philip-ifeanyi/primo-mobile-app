@@ -4,7 +4,7 @@ import { Text } from '@/components/ui/Text';
 import { Wordmark } from '@/components/ui/Wordmark';
 import { colors, radius, sizes } from '@/theme';
 import { Image as ExpoImage } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -18,18 +18,37 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { INTRO_DETAILS } from './data';
+import { markIntroSeen } from '@/state/session';
+
+/**
+ * Leaves the carousel, remembering that it has been seen.
+ *
+ * All three exits go through here — Skip, "Get started" on the last slide,
+ * and the "Log in" link — so a later launch sends the user straight to the
+ * login form instead of showing onboarding to someone who already has an
+ * account. Marked on the way out rather than on mount, so quitting during
+ * the first slide still shows it again next time.
+ */
+function useLeaveIntro() {
+  const router = useRouter();
+  return (href: Href) => {
+    markIntroSeen();
+    router.push(href);
+  };
+}
+
 
 type IntroItem = (typeof INTRO_DETAILS)[number];
 
 const IntroHeader = () => {
-  const router = useRouter();
+  const leaveIntro = useLeaveIntro();
 
   return (
     <View style={styles.header}>
       <Wordmark />
       <Pressable
         hitSlop={16}
-        onPress={() => router.push('/auth/signup')}
+        onPress={() => leaveIntro('/auth/signup')}
         accessibilityRole="button"
       >
         <Text
@@ -130,13 +149,13 @@ const IntroFooter = ({
   isLast: boolean;
   onNext: () => void;
 }) => {
-  const router = useRouter();
+  const leaveIntro = useLeaveIntro();
 
   return (
     <View style={styles.footer}>
       <Button
         title={isLast ? 'Get started' : 'Next'}
-        onPress={isLast ? () => router.push('/auth/signup') : onNext}
+        onPress={isLast ? () => leaveIntro('/auth/signup') : onNext}
         fullWidth
       />
       {/*
@@ -146,7 +165,7 @@ const IntroFooter = ({
         wraps the whole sentence instead.
       */}
       <Pressable
-        onPress={() => router.push('/auth/login')}
+        onPress={() => leaveIntro('/auth/login')}
         hitSlop={12}
         accessibilityRole="button"
         accessibilityLabel="Log in"

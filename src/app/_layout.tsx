@@ -1,3 +1,4 @@
+import { LockScreen } from '@/components/auth/LockScreen';
 import { restoreSession, useSession } from '@/state/session';
 import { fontAssets } from '@/theme';
 import { useFonts } from 'expo-font';
@@ -48,16 +49,17 @@ function useAuthGate(isReady: boolean) {
       return;
     }
 
-    // A returning user has no use for the onboarding carousel.
-    if (status === 'signedIn' && isIntro) {
-      router.replace('/home');
-    }
+    // Forward redirects off the intro are handled at render time in
+    // app/index.tsx, so they cannot flash the carousel for a frame. This
+    // gate stays responsible only for keeping signed-out visitors out.
+    void isIntro;
   }, [isReady, status, segments, router]);
 }
 
 export default function RootLayout() {
   const [loaded, error] = useFonts(fontAssets);
   const status = useSession((state) => state.status);
+  const locked = useSession((state) => state.locked);
 
   useEffect(() => {
     void restoreSession();
@@ -74,6 +76,21 @@ export default function RootLayout() {
   // Fonts still loading, or the keychain not yet read: keep the splash up
   // rather than flashing the intro at someone who is already signed in.
   if (!isReady) return null;
+
+  // A restored session behind biometrics renders the lock *instead of* the
+  // navigator, so there is no mounted route for a deep link or a stale back
+  // stack to reach. Nothing signed-in exists until the device confirms who
+  // is holding the phone.
+  if (locked) {
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <StatusBar style="dark" />
+          <LockScreen />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     // Required for react-native-gesture-handler. expo-router does not add it,

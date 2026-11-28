@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
 import { colors, radius } from '@/theme';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { setBiometricEnabled } from '@/state/session';
 import { useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useEffect, useState } from 'react';
@@ -40,6 +41,13 @@ export default function Biometric() {
     router.replace('/home');
   };
 
+  const decline = () => {
+    // Recorded explicitly rather than left unset, so a later launch does not
+    // keep asking someone who has already said no.
+    setBiometricEnabled(false);
+    goHome();
+  };
+
   const handleEnable = async () => {
     setEnabling(true);
     try {
@@ -50,6 +58,7 @@ export default function Biometric() {
 
       // No sensor, or nothing enrolled: nothing to turn on, so just continue.
       if (!hasHardware || !isEnrolled) {
+        setBiometricEnabled(false);
         goHome();
         return;
       }
@@ -59,15 +68,19 @@ export default function Biometric() {
         cancelLabel: 'Not now',
       });
 
-      // TODO: persist biometricEnabled in app state when this succeeds.
-      if (result.success) goHome();
+      // A failed or cancelled prompt leaves the sheet up rather than
+      // enabling something that was never confirmed.
+      if (result.success) {
+        setBiometricEnabled(true);
+        goHome();
+      }
     } finally {
       setEnabling(false);
     }
   };
 
   return (
-    <BottomSheet onDismiss={goHome}>
+    <BottomSheet onDismiss={decline}>
       <View style={styles.iconTile}>
         <MaterialCommunityIcons
           name={hasFace ? 'face-recognition' : 'fingerprint'}
@@ -88,7 +101,8 @@ export default function Biometric() {
         color="textMuted"
         style={styles.body}
       >
-        Skip your password next time. You can always fall back to a 6-digit PIN.
+        Next time you open Primo, unlock with {method} instead of typing your
+        password.
       </Text>
 
       <View style={styles.actions}>
@@ -100,7 +114,7 @@ export default function Biometric() {
         <Button
           title="Not now"
           variant="text"
-          onPress={goHome}
+          onPress={decline}
         />
       </View>
     </BottomSheet>
